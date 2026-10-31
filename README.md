@@ -36,7 +36,7 @@ Ranges: 7, 30 or 90 days (`/?range=7`). The page reloads itself when new usage a
 
 Flags: `--addr` (default `127.0.0.1:7777`), `--interval` (default `1m`, `0` disables periodic ingest), `--projects`.
 
-Fonts load from Google Fonts. Without network access the page falls back to system fonts.
+The page loads nothing external: fonts are system fonts (SF Mono in Safari, Menlo in Chrome, system sans for prose).
 
 Paths:
 

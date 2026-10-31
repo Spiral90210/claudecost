@@ -4,8 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>claudecost</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
   color-scheme: light;
@@ -17,7 +15,8 @@
   --chip: rgba(255,255,255,0.45); --line: #0b0b0b; --warn-bg: rgba(250,178,25,0.18);
   --opus: #2a78d6; --sonnet: #eb6834; --haiku: #1baf7a; --fable: #eda100; --other: #e87ba4;
   --h0: rgba(11,11,11,0.06); --h1: #cde2fb; --h2: #9ec5f4; --h3: #6da7ec; --h4: #3987e5; --h5: #1c5cab;
-  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  --sans: system-ui, -apple-system, 'Helvetica Neue', sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -33,7 +32,7 @@
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--page); color: var(--text); font-family: Inter, system-ui, -apple-system, sans-serif; }
+body { margin: 0; background: var(--page); color: var(--text); font-family: var(--sans); }
 .bg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
 .bg .dots { position: absolute; inset: 0; background-image: radial-gradient(var(--dots) 1px, transparent 1.5px); background-size: 24px 24px; }
 .bg .glow { position: absolute; border-radius: 50%; }
