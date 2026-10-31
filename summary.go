@@ -96,7 +96,6 @@ func cmdSummary(db *sql.DB, args []string) error {
 	fmt.Println("---")
 	printGroup("By model (today)", byModel, "--", mono)
 	printGroup("By effort (today)", byEffort, "--", mono)
-	fmt.Println(tokLine + " | size=11")
 	if unpriced > 0 {
 		fmt.Printf("%d calls have no price, run the price update skill | color=#d03b3b sfimage=exclamationmark.triangle\n", unpriced)
 	}
