@@ -203,8 +203,12 @@ const totalsCols = `COALESCE(SUM(cost_usd), 0), COUNT(*), COALESCE(SUM(input), 0
 const localDay = `date(ts, 'localtime')`
 
 func (s *server) sum(where string, args ...any) (totals, error) {
+	return sumTotals(s.db, where, args...)
+}
+
+func sumTotals(db *sql.DB, where string, args ...any) (totals, error) {
 	var t totals
-	err := s.db.QueryRow(`SELECT `+totalsCols+` FROM usage WHERE `+where, args...).
+	err := db.QueryRow(`SELECT `+totalsCols+` FROM usage WHERE `+where, args...).
 		Scan(&t.Cost, &t.Calls, &t.In, &t.Out, &t.Think, &t.CW, &t.CR)
 	return t, err
 }

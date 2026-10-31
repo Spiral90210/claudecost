@@ -2,10 +2,14 @@ package main
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 const schema = `
@@ -72,18 +76,35 @@ func openDB(path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	// immediate: concurrent ingests (serve + menu bar) queue for the write lock instead of failing.
+	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema); err != nil {
-		db.Close()
-		return nil, err
+	// Two processes creating a new database at once can get SQLITE_BUSY without the
+	// busy timeout applying (the file is not in WAL mode yet), so retry setup briefly.
+	for attempt := 0; ; attempt++ {
+		err = setupDB(db)
+		var se *sqlite.Error
+		if err == nil || attempt >= 100 || !errors.As(err, &se) || se.Code()&0xff != sqlite3.SQLITE_BUSY {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	if err := seedPrices(db); err != nil {
+	if err != nil {
 		db.Close()
 		return nil, err
 	}
 	return db, nil
+}
+
+func setupDB(db *sql.DB) error {
+	if _, err := db.Exec(schema); err != nil {
+		return fmt.Errorf("schema: %w", err)
+	}
+	if err := seedPrices(db); err != nil {
+		return fmt.Errorf("seed prices: %w", err)
+	}
+	return nil
 }

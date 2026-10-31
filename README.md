@@ -45,6 +45,24 @@ Paths:
 | Database | `--db PATH`, `$CLAUDECOST_DB`, `~/.claude/cost.db` |
 | Transcripts | `ingest --projects DIR`, `$CLAUDE_CONFIG_DIR/projects`, `~/.claude/projects` |
 
+### Menu bar (SwiftBar)
+
+`swiftbar/claudecost.1m.sh` is a [SwiftBar](https://github.com/swiftbar/SwiftBar) plugin. Every minute it reads new transcript lines and shows today's cost in the menu bar. The dropdown shows today, last 7 days and month to date, cost by model and effort for today, today's tokens, a link to the dashboard when `serve` is running, and an "Ingest now" action. The icon becomes a warning triangle when calls are unpriced or the ingest failed.
+
+Install (from the repo root, after installing SwiftBar with `brew install --cask swiftbar` and choosing a plugin folder):
+
+```sh
+go install .
+BIN="$(go env GOBIN)"; [ -n "$BIN" ] || BIN="$(go env GOPATH | cut -d: -f1)/bin"
+PLUGINS="$(defaults read com.ameba.SwiftBar PluginDirectory)"
+sed "s|^BIN=.*|BIN=\"$BIN/claudecost\"|" swiftbar/claudecost.1m.sh > "$PLUGINS/claudecost.1m.sh"
+chmod +x "$PLUGINS/claudecost.1m.sh"
+```
+
+SwiftBar picks it up automatically. To change the refresh interval, rename the file (e.g. `claudecost.5m.sh`). If your database is not at `~/.claude/cost.db`, add `--db PATH` to the last line of the installed script.
+
+`claudecost summary` prints the same numbers in the terminal. The menu bar, `serve` and manual `ingest` can all run at once: each ingest waits for the database write lock and continues from where the previous one stopped.
+
 ## How cost is calculated
 
 - Raw token counts are stored per API call: input, output (including thinking), cache writes (5m and 1h), cache reads, web searches.

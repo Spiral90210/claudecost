@@ -81,8 +81,21 @@ func cmdIngest(db *sql.DB, args []string) error {
 
 func ingest(db *sql.DB, root string) (ingestStats, error) {
 	var st ingestStats
+	pr, err := loadPricer(db)
+	if err != nil {
+		return st, err
+	}
+
+	// Offsets are read inside the write transaction so a concurrent ingest
+	// that waited for the lock starts from where the other one finished.
+	tx, err := db.Begin()
+	if err != nil {
+		return st, fmt.Errorf("ingest begin: %w", err)
+	}
+	defer tx.Rollback()
+
 	known := map[string]fileState{}
-	rows, err := db.Query(`SELECT path, size, mtime_ns, offset FROM files`)
+	rows, err := tx.Query(`SELECT path, size, mtime_ns, offset FROM files`)
 	if err != nil {
 		return st, err
 	}
@@ -96,17 +109,6 @@ func ingest(db *sql.DB, root string) (ingestStats, error) {
 		known[p] = s
 	}
 	rows.Close()
-
-	pr, err := loadPricer(db)
-	if err != nil {
-		return st, err
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return st, err
-	}
-	defer tx.Rollback()
 
 	ins, err := tx.Prepare(`
 		INSERT INTO usage (msg_id, request_id, ts, session_id, cwd, git_branch, is_subagent, model, effort, per_turn_effort,
@@ -136,6 +138,10 @@ func ingest(db *sql.DB, root string) (ingestStats, error) {
 	}
 	defer upFile.Close()
 
+	// WalkDir does not follow a symlinked root (e.g. ~/.claude/projects from dotfiles).
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
 	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
