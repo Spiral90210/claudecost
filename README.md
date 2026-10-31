@@ -123,10 +123,6 @@ On each ingest, for every session and model, claudecost subtracts the logged cal
 
 The dashboard shows the estimated total, and `report` and the menu bar note it. Sessions without a `cost-state` record get no estimate.
 
-## TODO
-
-- **Advisor tool calls:** the advisor's own inference is listed in `message.usage.iterations` (`type: "advisor_message"`, with its own `model`) and is not in the top-level usage. It is billed at the advisor model's rates. No advisor calls have been seen in transcripts yet, so this is unimplemented: confirm the transcript shape on a machine that has them, then price each `advisor_message` iteration at its model's rates.
-
 ## Changing prices by hand
 
 ```sh
@@ -140,3 +136,23 @@ claudecost prices import my-prices.json
 ```
 
 Both reprice the affected calls immediately.
+
+## TODO
+
+### Price advisor tool calls
+
+When Claude Code uses the advisor tool, the advisor model's own inference is billed at that model's rates. It is not in the top-level `message.usage`, which covers the executor only. Each advisor call is listed in `message.usage.iterations` as an entry with `type: "advisor_message"` and its own `model`. claudecost currently ignores `iterations`, so advisor cost is either missing or, if Claude Code's `cost-state` includes it, only approximated in the "unlogged" estimate.
+
+No advisor calls have been seen in transcripts yet. On a machine that has them:
+
+1. Find them: `grep -l -r --include='*.jsonl' advisor_message ~/.claude/projects`
+2. Confirm the shape of one `iterations` array:
+   - the fields on `advisor_message` entries (`model`, token counts, cache fields)
+   - whether top-level usage equals the sum of the executor entries
+   - whether that session's `cost-state` includes the advisor tokens under the advisor's model
+3. Implement in `ingest.go`: add `iterations` to the usage struct, and insert one extra `usage` row per `advisor_message` entry:
+   - `msg_id` = `<message id>:advisor:<index>`, same `request_id`
+   - `model` from the entry, and the same session, timestamp and effort as the parent line
+   - priced like any other call
+4. Check that the "unlogged" estimate for those sessions drops by about the advisor cost now counted directly.
+5. Add a sample line to a scratch database and compare the cost with a hand calculation from the pricing page.
