@@ -197,7 +197,8 @@ type totals struct {
 
 func (t totals) tokens() int64 { return t.In + t.Out + t.CW + t.CR }
 
-const totalsCols = `COALESCE(SUM(cost_usd), 0), COUNT(*), COALESCE(SUM(input), 0), COALESCE(SUM(output), 0),
+// Calls counts logged API calls only; estimated (unlogged) rows add cost and tokens.
+const totalsCols = `COALESCE(SUM(cost_usd), 0), COALESCE(SUM(estimated = 0), 0), COALESCE(SUM(input), 0), COALESCE(SUM(output), 0),
 	COALESCE(SUM(thinking), 0), COALESCE(SUM(cache_write_5m + cache_write_1h), 0), COALESCE(SUM(cache_read), 0)`
 
 const localDay = `date(ts, 'localtime')`
@@ -462,13 +463,15 @@ func (s *server) buildPage(rng int) (*page, error) {
 	for _, c := range comp {
 		p.Comp = append(p.Comp, barRow{Name: c.name, Tok: c.tok, Cost: money(c.cost), Pct: pct(c.cost, rangeT.Cost), W: share(c.cost, rangeT.Cost)})
 	}
-	var subCost float64
+	var subCost, estCost float64
 	s.db.QueryRow(`SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE is_subagent = 1 AND `+inRange, day(start)).Scan(&subCost)
+	s.db.QueryRow(`SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE estimated = 1 AND `+inRange, day(start)).Scan(&estCost)
 	p.Stats = []stat{
 		{tok(rangeT.tokens()), "tokens total"},
 		{pct(float64(rangeT.CR), float64(rangeT.In+rangeT.CW+rangeT.CR)), "cache hit rate"},
 		{money(saved), "net saved by caching"},
 		{pct(subCost, rangeT.Cost), "spend in subagents"},
+		{money(estCost), "unlogged calls (estimated)"},
 	}
 
 	// ---- heatmap ----
@@ -565,8 +568,13 @@ func (s *server) breakdown(key, start string, total float64, limit int, label fu
 			name, class = label(k)
 		}
 		r := barRow{Name: name, Full: k, Class: class, Cost: money(t.Cost), Pct: pct(t.Cost, total), W: share(t.Cost, total),
-			Calls: commas(t.Calls), Per: fmt.Sprintf("$%.3f", t.Cost/float64(t.Calls))}
-		if label == nil {
+			Calls: commas(t.Calls), Per: "-"}
+		if t.Calls > 0 {
+			r.Per = fmt.Sprintf("$%.3f", t.Cost/float64(t.Calls))
+		}
+		if t.Calls == 0 {
+			r.Tok = "estimated from Claude Code session totals; calls not in transcripts"
+		} else if label == nil {
 			r.Tok = fmt.Sprintf("avg %s out/call | %s thinking", tok(t.Out/t.Calls), pct(float64(t.Think), float64(t.Out)))
 		} else {
 			r.Tok = fmt.Sprintf("in %s | out %s | cw %s | cr %s", tok(t.In), tok(t.Out), tok(t.CW), tok(t.CR))
@@ -644,7 +652,7 @@ func projectRoot(cwd string) string {
 }
 
 func (s *server) sessions(start string) ([]sessRow, error) {
-	rows, err := s.db.Query(`SELECT session_id, MIN(ts), MAX(ts), MAX(cwd), COUNT(*), COALESCE(SUM(cost_usd), 0),
+	rows, err := s.db.Query(`SELECT session_id, MIN(ts), MAX(ts), MAX(cwd), SUM(estimated = 0), COALESCE(SUM(cost_usd), 0),
 		COALESCE(SUM(CASE WHEN is_subagent = 1 THEN cost_usd END), 0),
 		SUM(input + output + cache_write_5m + cache_write_1h + cache_read), SUM(output)
 		FROM usage WHERE `+localDay+` >= ? GROUP BY session_id ORDER BY 6 DESC LIMIT 8`, start)

@@ -34,9 +34,9 @@ func cmdReport(db *sql.DB, args []string) error {
 	if *by == "day" {
 		order = "k"
 	}
-	q := fmt.Sprintf(`SELECT %s AS k, COUNT(*), COALESCE(SUM(cost_usd), 0) AS cost,
+	q := fmt.Sprintf(`SELECT %s AS k, SUM(estimated = 0), COALESCE(SUM(cost_usd), 0) AS cost,
 		SUM(input), SUM(output), SUM(thinking), SUM(cache_write_5m + cache_write_1h), SUM(cache_read),
-		SUM(cost_usd IS NULL)
+		SUM(cost_usd IS NULL), COALESCE(SUM(CASE WHEN estimated = 1 THEN cost_usd END), 0)
 		FROM usage WHERE %s GROUP BY k ORDER BY %s`, key, where, order)
 	rows, err := db.Query(q)
 	if err != nil {
@@ -47,24 +47,28 @@ func cmdReport(db *sql.DB, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.AlignRight)
 	fmt.Fprintf(w, "%s\tcalls\tcost\tinput\toutput\tthinking\tcache_write\tcache_read\t\n", *by)
 	var tCalls, tUnpriced int64
-	var tCost float64
+	var tCost, tEst float64
 	for rows.Next() {
 		var k string
 		var calls, in, out, think, cw, cr, unpriced int64
-		var cost float64
-		if err := rows.Scan(&k, &calls, &cost, &in, &out, &think, &cw, &cr, &unpriced); err != nil {
+		var cost, est float64
+		if err := rows.Scan(&k, &calls, &cost, &in, &out, &think, &cw, &cr, &unpriced, &est); err != nil {
 			return err
 		}
 		fmt.Fprintf(w, "%s\t%d\t$%.2f\t%s\t%s\t%s\t%s\t%s\t\n", k, calls, cost, tok(in), tok(out), tok(think), tok(cw), tok(cr))
 		tCalls += calls
 		tCost += cost
 		tUnpriced += unpriced
+		tEst += est
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
 	fmt.Fprintf(w, "total\t%d\t$%.2f\t\t\t\t\t\t\n", tCalls, tCost)
 	w.Flush()
+	if tEst > 0 {
+		fmt.Printf("includes $%.2f estimated for calls missing from transcripts (effort \"unlogged\"; from Claude Code session totals)\n", tEst)
+	}
 	if tUnpriced > 0 {
 		fmt.Printf("warning: %d calls have no matching price (see: claudecost report --by model, claudecost prices list)\n", tUnpriced)
 	}

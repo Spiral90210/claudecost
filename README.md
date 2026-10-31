@@ -107,7 +107,25 @@ Requires Go 1.27+. Pure Go (no cgo).
 - Each call uses the newest row in effect at its timestamp, so calls stay priced at the rate that applied when they were made.
 - `inference_geo: "us"` applies `geo_us_multiplier`. Web searches add `web_search_per_1k` per 1,000.
 - A model with no price row is left unpriced, not $0. `report`, the dashboard and the menu bar warn about it, and the next ingest prices it once a row exists.
+- Dated model ids (e.g. `claude-haiku-4-5-20251001`) are stored and priced as the undated id.
 - Transcripts log each API response several times. Each response is stored once, with the highest token counts seen.
+- When a session is resumed, Claude Code copies earlier lines into the new session's file. Those calls are counted once and credited to the original session (found via the `continued-in` record).
+
+### Unlogged calls (estimated)
+
+Some billable calls never appear in transcripts as assistant messages: recaps, compaction, and Haiku side calls such as session titles. Claude Code also writes `cost-state` records with its own cumulative per-model totals for each session.
+
+On each ingest, for every session and model, claudecost subtracts the logged calls in that session's files (including subagents and calls copied from a resumed session) from the latest `cost-state` totals. Any positive remainder becomes one estimated row:
+- `effort` is `unlogged`, and it counts as 0 calls
+- it is dated at the session's last logged call
+- `cost-state` gives no 5m/1h split for cache writes, so they are priced at the 5m rate
+- it uses standard speed and the base prompt tier
+
+The dashboard shows the estimated total, and `report` and the menu bar note it. Sessions without a `cost-state` record get no estimate.
+
+## TODO
+
+- **Advisor tool calls:** the advisor's own inference is listed in `message.usage.iterations` (`type: "advisor_message"`, with its own `model`) and is not in the top-level usage. It is billed at the advisor model's rates. No advisor calls have been seen in transcripts yet, so this is unimplemented: confirm the transcript shape on a machine that has them, then price each `advisor_message` iteration at its model's rates.
 
 ## Changing prices by hand
 

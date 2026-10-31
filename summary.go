@@ -36,6 +36,8 @@ func cmdSummary(db *sql.DB, args []string) error {
 	mtd, _ := sumTotals(db, localDay+` >= ?`, day(monthStart))
 	var unpriced int64
 	db.QueryRow(`SELECT COUNT(*) FROM usage WHERE cost_usd IS NULL`).Scan(&unpriced)
+	var estToday float64
+	db.QueryRow(`SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE estimated = 1 AND `+localDay+` = ?`, day(today)).Scan(&estToday)
 
 	byModel, err := todayBy(db, `model`, day(today))
 	if err != nil {
@@ -59,6 +61,9 @@ func cmdSummary(db *sql.DB, args []string) error {
 	if tToday.Calls > 0 {
 		tokLine = fmt.Sprintf("Tokens today: %s (%s out, %s cache read), %s calls",
 			tok(tToday.tokens()), tok(tToday.Out), pct(float64(tToday.CR), float64(tToday.tokens())), commas(tToday.Calls))
+	}
+	if estToday > 0 {
+		tokLine += fmt.Sprintf("; today includes %s estimated for unlogged calls", money(estToday))
 	}
 
 	if *format != "swiftbar" {

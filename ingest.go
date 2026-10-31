@@ -26,7 +26,20 @@ type record struct {
 	Effort        string `json:"effort"`
 	PerTurnEffort string `json:"perTurnEffort"`
 	Version       string `json:"version"`
-	Message       struct {
+	// type "continued-in"
+	ContinuedIn string `json:"continuedInSessionId"`
+	// type "cost-state": Claude Code's cumulative per-model totals for the session
+	StartTime  int64 `json:"startTime"`
+	ModelUsage map[string]struct {
+		Input         int64   `json:"inputTokens"`
+		Output        int64   `json:"outputTokens"`
+		Thinking      int64   `json:"thinkingTokens"`
+		CacheRead     int64   `json:"cacheReadInputTokens"`
+		CacheCreation int64   `json:"cacheCreationInputTokens"`
+		WebSearch     int64   `json:"webSearchRequests"`
+		CostUSD       float64 `json:"costUSD"`
+	} `json:"modelUsage"`
+	Message struct {
 		ID    string `json:"id"`
 		Model string `json:"model"`
 		Usage *struct {
@@ -81,18 +94,17 @@ func cmdIngest(db *sql.DB, args []string) error {
 
 func ingest(db *sql.DB, root string) (ingestStats, error) {
 	var st ingestStats
-	pr, err := loadPricer(db)
-	if err != nil {
-		return st, err
-	}
-
-	// Offsets are read inside the write transaction so a concurrent ingest
-	// that waited for the lock starts from where the other one finished.
+	// Offsets and prices are read inside the write transaction so a concurrent
+	// ingest or price change that held the lock is fully seen.
 	tx, err := db.Begin()
 	if err != nil {
 		return st, fmt.Errorf("ingest begin: %w", err)
 	}
 	defer tx.Rollback()
+	pr, err := loadPricer(tx)
+	if err != nil {
+		return st, err
+	}
 
 	known := map[string]fileState{}
 	rows, err := tx.Query(`SELECT path, size, mtime_ns, offset FROM files`)
@@ -138,6 +150,30 @@ func ingest(db *sql.DB, root string) (ingestStats, error) {
 	}
 	defer upFile.Close()
 
+	insApp, err := tx.Prepare(`INSERT OR IGNORE INTO appearances (msg_id, request_id, session_id) VALUES (?, ?, ?)`)
+	if err != nil {
+		return st, err
+	}
+	defer insApp.Close()
+
+	insCont, err := tx.Prepare(`INSERT OR REPLACE INTO continuations (session_id, continued_in) VALUES (?, ?)`)
+	if err != nil {
+		return st, err
+	}
+	defer insCont.Close()
+
+	// cost-state totals only grow, so keep the largest value seen for each field.
+	insCS, err := tx.Prepare(`INSERT INTO cost_state (session_id, model, input, output, thinking, cache_creation, cache_read, web_search, cc_cost, start_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (session_id, model) DO UPDATE SET
+			input = MAX(input, excluded.input), output = MAX(output, excluded.output), thinking = MAX(thinking, excluded.thinking),
+			cache_creation = MAX(cache_creation, excluded.cache_creation), cache_read = MAX(cache_read, excluded.cache_read),
+			web_search = MAX(web_search, excluded.web_search), cc_cost = MAX(cc_cost, excluded.cc_cost)`)
+	if err != nil {
+		return st, err
+	}
+	defer insCS.Close()
+
 	// WalkDir does not follow a symlinked root (e.g. ~/.claude/projects from dotfiles).
 	if resolved, err := filepath.EvalSymlinks(root); err == nil {
 		root = resolved
@@ -166,14 +202,34 @@ func ingest(db *sql.DB, root string) (ingestStats, error) {
 		}
 		subagent := strings.Contains(path, string(filepath.Separator)+"subagents"+string(filepath.Separator))
 		consumed, err := readFrom(path, offset, func(line []byte) error {
-			if !bytes.Contains(line, []byte(`"usage"`)) || !bytes.Contains(line, []byte(`"type":"assistant"`)) {
+			isUsage := bytes.Contains(line, []byte(`"usage"`)) && bytes.Contains(line, []byte(`"type":"assistant"`))
+			if !isUsage && !bytes.Contains(line, []byte(`"type":"cost-state"`)) && !bytes.Contains(line, []byte(`"type":"continued-in"`)) {
 				return nil
 			}
 			var r record
-			if json.Unmarshal(line, &r) != nil || r.Type != "assistant" || r.Message.Usage == nil || r.Message.ID == "" {
+			if json.Unmarshal(line, &r) != nil {
 				return nil
 			}
-			if r.Message.Model == "" || r.Message.Model == "<synthetic>" {
+			switch r.Type {
+			case "cost-state":
+				for m, u := range r.ModelUsage {
+					if _, err := insCS.Exec(r.SessionID, normalizeModel(m), u.Input, u.Output, u.Thinking, u.CacheCreation,
+						u.CacheRead, u.WebSearch, u.CostUSD, r.StartTime); err != nil {
+						return err
+					}
+				}
+				return nil
+			case "continued-in":
+				if r.SessionID != "" && r.ContinuedIn != "" {
+					_, err := insCont.Exec(r.SessionID, r.ContinuedIn)
+					return err
+				}
+				return nil
+			case "assistant":
+			default:
+				return nil
+			}
+			if r.Message.Usage == nil || r.Message.ID == "" || r.Message.Model == "" || r.Message.Model == "<synthetic>" {
 				return nil
 			}
 			st.lines++
@@ -186,7 +242,7 @@ func ingest(db *sql.DB, root string) (ingestStats, error) {
 			if speed == "" {
 				speed = "standard"
 			}
-			c := call{Model: r.Message.Model, Speed: speed, Geo: u.InferenceGeo, TS: r.Timestamp,
+			c := call{Model: normalizeModel(r.Message.Model), Speed: speed, Geo: u.InferenceGeo, TS: r.Timestamp,
 				In: u.InputTokens, Out: u.OutputTokens, CW5: cw5, CW1: cw1, CR: u.CacheRead, WebSearch: u.ServerToolUse.WebSearch}
 			usd, pid, ok := pr.cost(c)
 			res, err := ins.Exec(r.Message.ID, r.RequestID, r.Timestamp, r.SessionID, r.Cwd, r.GitBranch, subagent || r.IsSidechain,
@@ -199,7 +255,8 @@ func ingest(db *sql.DB, root string) (ingestStats, error) {
 			if n, _ := res.RowsAffected(); n > 0 {
 				st.upserts++
 			}
-			return nil
+			_, err = insApp.Exec(r.Message.ID, r.RequestID, r.SessionID)
+			return err
 		})
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
@@ -212,15 +269,72 @@ func ingest(db *sql.DB, root string) (ingestStats, error) {
 	if walkErr != nil {
 		return st, walkErr
 	}
-	if err := tx.Commit(); err != nil {
+	if st.read > 0 {
+		if _, err := tx.Exec(ownerSQL); err != nil {
+			return st, fmt.Errorf("session owners: %w", err)
+		}
+		if _, err := tx.Exec(unloggedSQL); err != nil {
+			return st, fmt.Errorf("unlogged estimates: %w", err)
+		}
+	}
+	// Rows whose tokens grew on a later duplicate line, new estimates, and models
+	// that had no price yet.
+	if _, err := repriceTx(tx, pr, `cost_usd IS NULL`); err != nil {
 		return st, err
 	}
-	// Rows whose tokens grew on a later duplicate line, or whose model had no price yet.
-	if _, err := reprice(db, `cost_usd IS NULL`); err != nil {
-		return st, err
-	}
-	return st, nil
+	return st, tx.Commit()
 }
+
+// ownerSQL gives a message copied into a resumed session to the session it was
+// first logged in: of the sessions it appears in, the one that is not the
+// continuation of another.
+const ownerSQL = `
+UPDATE usage SET session_id = COALESCE((
+	SELECT a.session_id FROM appearances a
+	WHERE a.msg_id = usage.msg_id AND a.request_id = usage.request_id
+		AND NOT EXISTS (
+			SELECT 1 FROM appearances b JOIN continuations c ON c.session_id = b.session_id
+			WHERE b.msg_id = a.msg_id AND b.request_id = a.request_id AND c.continued_in = a.session_id)
+	ORDER BY a.session_id LIMIT 1), session_id)
+WHERE estimated = 0 AND EXISTS (
+	SELECT 1 FROM appearances a2
+	WHERE a2.msg_id = usage.msg_id AND a2.request_id = usage.request_id AND a2.session_id <> usage.session_id)`
+
+// unloggedSQL rebuilds one estimated row per session and model: Claude Code's
+// cost-state totals minus every logged call that appears in that session's
+// files. Copied calls count toward each session they appear in, because each
+// session's cost-state includes them. Cache writes have no 5m/1h split in
+// cost-state, so the remainder is priced at the 5m rate. The row is dated at the
+// session's last logged call.
+const unloggedSQL = `
+DELETE FROM usage WHERE estimated = 1;
+INSERT INTO usage (msg_id, request_id, ts, session_id, cwd, is_subagent, model, effort, speed,
+	input, output, thinking, cache_write_5m, cache_write_1h, cache_read, web_search, web_fetch, estimated)
+SELECT * FROM (
+	SELECT 'unlogged:' || cs.session_id || ':' || cs.model, '',
+		COALESCE(s.last_ts, strftime('%Y-%m-%dT%H:%M:%fZ', cs.start_ms / 1000.0, 'unixepoch')),
+		cs.session_id, s.cwd, 0, cs.model, 'unlogged', 'standard',
+		MAX(cs.input - COALESCE(o.input, 0), 0) AS gi,
+		MAX(cs.output - COALESCE(o.output, 0), 0) AS go,
+		MAX(cs.thinking - COALESCE(o.thinking, 0), 0),
+		MAX(cs.cache_creation - COALESCE(o.cw, 0), 0) AS gcw,
+		0,
+		MAX(cs.cache_read - COALESCE(o.cr, 0), 0) AS gcr,
+		MAX(cs.web_search - COALESCE(o.ws, 0), 0) AS gws,
+		0, 1
+	FROM cost_state cs
+	LEFT JOIN (
+		SELECT a.session_id, u.model, SUM(u.input) AS input, SUM(u.output) AS output, SUM(u.thinking) AS thinking,
+			SUM(u.cache_write_5m + u.cache_write_1h) AS cw, SUM(u.cache_read) AS cr, SUM(u.web_search) AS ws
+		FROM appearances a JOIN usage u ON u.msg_id = a.msg_id AND u.request_id = a.request_id AND u.estimated = 0
+		GROUP BY a.session_id, u.model
+	) o ON o.session_id = cs.session_id AND o.model = cs.model
+	LEFT JOIN (
+		SELECT a.session_id, MAX(u.ts) AS last_ts, MAX(u.cwd) AS cwd
+		FROM appearances a JOIN usage u ON u.msg_id = a.msg_id AND u.request_id = a.request_id AND u.estimated = 0
+		GROUP BY a.session_id
+	) s ON s.session_id = cs.session_id
+) WHERE gi + go + gcw + gcr + gws > 0`
 
 // readFrom calls fn for each complete line after offset and returns the bytes consumed.
 // A trailing line without a newline is still being written, so it is left for the next run.

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 	"text/tabwriter"
 )
 
@@ -36,7 +37,19 @@ type PriceFile struct {
 type call struct {
 	Model, Speed, Geo, TS            string
 	In, Out, CW5, CW1, CR, WebSearch int64
+	// Estimated rows aggregate many requests, so prompt-size tiers do not apply.
+	Estimated bool
 }
+
+// querier is satisfied by *sql.DB and *sql.Tx.
+type querier interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
+var datedModel = regexp.MustCompile(`-\d{8}$`)
+
+// normalizeModel maps dated ids (claude-haiku-4-5-20251001) to the priced id.
+func normalizeModel(m string) string { return datedModel.ReplaceAllString(m, "") }
 
 type pricer struct {
 	rows      []Price
@@ -88,7 +101,7 @@ func upsertPrice(tx *sql.Tx, p Price) error {
 	return err
 }
 
-func loadPrices(db *sql.DB) ([]Price, error) {
+func loadPrices(db querier) ([]Price, error) {
 	rows, err := db.Query(`SELECT id, model, speed, min_prompt, effective_from, input, output, cache_write_5m, cache_write_1h, cache_read, COALESCE(source, '')
 		FROM prices ORDER BY model, speed, min_prompt, effective_from`)
 	if err != nil {
@@ -106,7 +119,7 @@ func loadPrices(db *sql.DB) ([]Price, error) {
 	return out, rows.Err()
 }
 
-func loadSettings(db *sql.DB) (map[string]float64, error) {
+func loadSettings(db querier) (map[string]float64, error) {
 	rows, err := db.Query(`SELECT key, value FROM settings ORDER BY key`)
 	if err != nil {
 		return nil, err
@@ -124,7 +137,7 @@ func loadSettings(db *sql.DB) (map[string]float64, error) {
 	return out, rows.Err()
 }
 
-func loadPricer(db *sql.DB) (*pricer, error) {
+func loadPricer(db querier) (*pricer, error) {
 	rows, err := loadPrices(db)
 	if err != nil {
 		return nil, err
@@ -136,17 +149,22 @@ func loadPricer(db *sql.DB) (*pricer, error) {
 	return &pricer{rows: rows, geoUS: s["geo_us_multiplier"], webSearch: s["web_search_per_1k"]}, nil
 }
 
-// cost picks the newest price row in effect at c.TS for the model and speed,
-// using the highest prompt-size tier the request qualifies for.
+// cost picks the highest prompt-size tier the request qualifies for, then the
+// newest row of that tier in effect at c.TS, for the model and speed. Tier comes
+// first so a dated change to one tier does not hide the other tiers.
 func (p *pricer) cost(c call) (float64, int64, bool) {
 	prompt := c.In + c.CW5 + c.CW1 + c.CR
+	if c.Estimated {
+		prompt = 0
+	}
+	model := normalizeModel(c.Model)
 	var best *Price
 	for i := range p.rows {
 		r := &p.rows[i]
-		if r.Model != c.Model || r.Speed != c.Speed || r.MinPrompt > prompt || r.EffectiveFrom > c.TS {
+		if r.Model != model || r.Speed != c.Speed || r.MinPrompt > prompt || r.EffectiveFrom > c.TS {
 			continue
 		}
-		if best == nil || r.EffectiveFrom > best.EffectiveFrom || (r.EffectiveFrom == best.EffectiveFrom && r.MinPrompt > best.MinPrompt) {
+		if best == nil || r.MinPrompt > best.MinPrompt || (r.MinPrompt == best.MinPrompt && r.EffectiveFrom > best.EffectiveFrom) {
 			best = r
 		}
 	}
@@ -294,16 +312,31 @@ func cmdReprice(db *sql.DB, args []string) error {
 	return nil
 }
 
+// reprice reads prices and rows and writes costs in one write transaction, so a
+// concurrent ingest or price change cannot interleave and leave a stale cost.
 func reprice(db *sql.DB, where string, args ...any) (int, error) {
-	pr, err := loadPricer(db)
+	tx, err := db.Begin()
 	if err != nil {
 		return 0, err
 	}
-	q := `SELECT id, model, speed, COALESCE(inference_geo, ''), ts, input, output, cache_write_5m, cache_write_1h, cache_read, web_search FROM usage`
+	defer tx.Rollback()
+	pr, err := loadPricer(tx)
+	if err != nil {
+		return 0, err
+	}
+	n, err := repriceTx(tx, pr, where, args...)
+	if err != nil {
+		return 0, err
+	}
+	return n, tx.Commit()
+}
+
+func repriceTx(tx *sql.Tx, pr *pricer, where string, args ...any) (int, error) {
+	q := `SELECT id, model, speed, COALESCE(inference_geo, ''), ts, input, output, cache_write_5m, cache_write_1h, cache_read, web_search, estimated FROM usage`
 	if where != "" {
 		q += ` WHERE ` + where
 	}
-	rows, err := db.Query(q, args...)
+	rows, err := tx.Query(q, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -316,7 +349,7 @@ func reprice(db *sql.DB, where string, args ...any) (int, error) {
 	for rows.Next() {
 		var id int64
 		var c call
-		if err := rows.Scan(&id, &c.Model, &c.Speed, &c.Geo, &c.TS, &c.In, &c.Out, &c.CW5, &c.CW1, &c.CR, &c.WebSearch); err != nil {
+		if err := rows.Scan(&id, &c.Model, &c.Speed, &c.Geo, &c.TS, &c.In, &c.Out, &c.CW5, &c.CW1, &c.CR, &c.WebSearch, &c.Estimated); err != nil {
 			rows.Close()
 			return 0, err
 		}
@@ -328,11 +361,6 @@ func reprice(db *sql.DB, where string, args ...any) (int, error) {
 		return 0, err
 	}
 
-	tx, err := db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
 	stmt, err := tx.Prepare(`UPDATE usage SET cost_usd = ?, price_id = ? WHERE id = ?`)
 	if err != nil {
 		return 0, err
@@ -343,5 +371,5 @@ func reprice(db *sql.DB, where string, args ...any) (int, error) {
 			return 0, err
 		}
 	}
-	return len(ups), tx.Commit()
+	return len(ups), nil
 }

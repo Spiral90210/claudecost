@@ -26,7 +26,11 @@ Go CLI: ingests Claude Code transcripts (`~/.claude/projects/**/*.jsonl`) into S
 - Prices: never from memory. Source is https://platform.claude.com/docs/en/about-claude/pricing.md. `prices.json` only seeds an empty `prices` table; existing databases change via `prices set/import`.
 - Transcripts log each API response several times (one line per content block, output_tokens growing). Dedupe key is (message.id, requestId); upsert keeps MAX per token field and nulls cost, then `ingest` reprices `cost_usd IS NULL` rows. Unpriced models stay NULL, never $0.
 - Ingest tracks a byte offset per file; a trailing line without `\n` is left for the next run; a file smaller than its offset is re-read from 0.
-- `db.SetMaxOpenConns(1)`: never call `db.*` while a `tx` is open (deadlock). Load anything needed before `db.Begin()`.
+- Resumed sessions copy earlier lines into the new session file with the new sessionId but the original timestamp. `appearances` records every session a message is in; `ownerSQL` credits it to the session that is not a `continued-in` target. The `continued-in` record lives in the original session's file.
+- Unlogged estimates (`estimated = 1`, effort `unlogged`) are rebuilt on every ingest that read data (`unloggedSQL`): `cost_state` minus all logged calls appearing in that session, per field, clamped at 0. Each session's cost-state includes copied calls, so compare against appearances, not `usage.session_id`. Call counts use `SUM(estimated = 0)`, not `COUNT(*)`.
+- Schema changes go in `migrations` in `db.go` (tracked by `PRAGMA user_version`). A migration that needs new per-line data resets `files` offsets so the next ingest re-reads everything; dedupe makes that safe.
+- Price selection: highest qualifying `min_prompt` tier first, then newest `effective_from`. Estimated rows always use tier 0. Model ids are normalized (`-YYYYMMDD` stripped) before lookup.
+- `db.SetMaxOpenConns(1)`: never call `db.*` while a `tx` is open (deadlock). Inside a transaction, pass the `tx` (e.g. `loadPricer(tx)`, which takes a `querier`).
 - Transactions are `_txlock=immediate` so concurrent ingests (serve + menu bar + CLI) queue; offsets are read inside the tx. Setup retries SQLITE_BUSY because a brand-new file isn't in WAL mode yet.
 - `ts` is stored as UTC RFC3339; days and hours use `date(ts, 'localtime')`. `effective_from` (YYYY-MM-DD) compares to `ts` as a string.
 - Effort uses `per_turn_effort`, falling back to `effort` (the difference between the two transcript fields is unconfirmed).

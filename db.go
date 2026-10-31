@@ -70,7 +70,48 @@ CREATE TABLE IF NOT EXISTS settings (
 	key   TEXT PRIMARY KEY,
 	value REAL NOT NULL
 );
+
+-- Every session a message was logged in. Resumed sessions copy earlier lines,
+-- so one message can appear in several sessions.
+CREATE TABLE IF NOT EXISTS appearances (
+	msg_id     TEXT NOT NULL,
+	request_id TEXT NOT NULL,
+	session_id TEXT NOT NULL,
+	PRIMARY KEY (msg_id, request_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS appearances_session ON appearances (session_id);
+
+-- "continued-in" records: session_id continued as continued_in.
+CREATE TABLE IF NOT EXISTS continuations (
+	session_id   TEXT PRIMARY KEY,
+	continued_in TEXT NOT NULL
+);
+
+-- Claude Code's own cumulative per-session, per-model totals ("cost-state" records).
+CREATE TABLE IF NOT EXISTS cost_state (
+	session_id     TEXT NOT NULL,
+	model          TEXT NOT NULL,
+	input          INTEGER NOT NULL,
+	output         INTEGER NOT NULL,
+	thinking       INTEGER NOT NULL,
+	cache_creation INTEGER NOT NULL,
+	cache_read     INTEGER NOT NULL,
+	web_search     INTEGER NOT NULL,
+	cc_cost        REAL NOT NULL,
+	start_ms       INTEGER NOT NULL,
+	PRIMARY KEY (session_id, model)
+);
 `
+
+// migrations run once each, in order, tracked by PRAGMA user_version.
+var migrations = []string{
+	// 1: unlogged-call estimates. Re-read every transcript to fill appearances,
+	// continuations and cost_state, and strip date suffixes from model ids.
+	`ALTER TABLE usage ADD COLUMN estimated INTEGER NOT NULL DEFAULT 0;
+	UPDATE files SET size = -1, mtime_ns = 0, offset = 0;
+	UPDATE usage SET model = substr(model, 1, length(model) - 9), cost_usd = NULL, price_id = NULL
+		WHERE model GLOB '*-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]';`,
+}
 
 func openDB(path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -103,8 +144,35 @@ func setupDB(db *sql.DB) error {
 	if _, err := db.Exec(schema); err != nil {
 		return fmt.Errorf("schema: %w", err)
 	}
+	if err := migrate(db); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
 	if err := seedPrices(db); err != nil {
 		return fmt.Errorf("seed prices: %w", err)
 	}
 	return nil
+}
+
+func migrate(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var v int
+	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+		return err
+	}
+	if v >= len(migrations) {
+		return nil
+	}
+	for i := v; i < len(migrations); i++ {
+		if _, err := tx.Exec(migrations[i]); err != nil {
+			return fmt.Errorf("migration %d: %w", i+1, err)
+		}
+	}
+	if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, len(migrations))); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
