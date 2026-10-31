@@ -19,7 +19,24 @@ claudecost ingest                          # read new transcript lines
 claudecost report --by day --days 30       # also: model, effort, project, session; --days 0 = all
 claudecost prices list                     # current price table
 claudecost reprice                         # recompute every call's cost
+claudecost serve                           # dashboard on http://127.0.0.1:7777
 ```
+
+### Dashboard
+
+`claudecost serve` runs an ingest on start and then every minute, and serves a dashboard with:
+
+- today, last 7 days, month to date, and average per active day, each with token totals
+- daily cost stacked by model family with a 7-day average line; hover a day for its model and token breakdown
+- cost by model, effort and project (worktrees and subdirectories are grouped under their git repo)
+- cost by token type, cache hit rate, net savings from caching, subagent share
+- an hour x weekday heatmap and the most expensive sessions
+
+Ranges: 7, 30 or 90 days (`/?range=7`). The page reloads itself when new usage arrives and follows the system light/dark setting.
+
+Flags: `--addr` (default `127.0.0.1:7777`), `--interval` (default `1m`, `0` disables periodic ingest), `--projects`.
+
+Fonts load from Google Fonts. Without network access the page falls back to system fonts.
 
 Paths:
 

@@ -20,6 +20,7 @@ commands:
   prices import F   upsert prices from a JSON file, then reprice
   prices export     print the price table as JSON (same format as import)
   reprice           recompute cost for every row (--model to limit)
+  serve             web dashboard (--addr 127.0.0.1:7777, --interval 1m)
 
 db path: --db, else $CLAUDECOST_DB, else ~/.claude/cost.db
 transcripts: --projects, else $CLAUDE_CONFIG_DIR/projects, else ~/.claude/projects
@@ -36,7 +37,8 @@ func main() {
 		os.Exit(2)
 	}
 
-	db, err := openDB(resolveDB(*dbPath))
+	path := resolveDB(*dbPath)
+	db, err := openDB(path)
 	if err != nil {
 		fatal(err)
 	}
@@ -51,6 +53,8 @@ func main() {
 		err = cmdPrices(db, args[1:])
 	case "reprice":
 		err = cmdReprice(db, args[1:])
+	case "serve":
+		err = cmdServe(db, path, args[1:])
 	default:
 		global.Usage()
 		os.Exit(2)

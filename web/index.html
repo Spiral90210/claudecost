@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claudecost</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --page: #e9edf3; --glowA: rgba(42,120,214,0.28); --glowB: rgba(98,80,214,0.20); --glowC: rgba(27,175,122,0.16);
+  --dots: rgba(11,11,11,0.07); --card: rgba(255,255,255,0.55); --border: rgba(255,255,255,0.75);
+  --shadow: 0 10px 40px rgba(30,45,70,0.12), inset 0 0 0 1px rgba(11,11,11,0.05);
+  --text: #0b0b0b; --text2: #3f3e3b; --muted: #5f5e59; --grid: rgba(11,11,11,0.08); --axis: #c3c2b7;
+  --bar: #52514e; --track: rgba(11,11,11,0.07); --hover: rgba(11,11,11,0.05); --sel: rgba(255,255,255,0.9);
+  --chip: rgba(255,255,255,0.45); --line: #0b0b0b; --warn-bg: rgba(250,178,25,0.18);
+  --opus: #2a78d6; --sonnet: #eb6834; --haiku: #1baf7a; --fable: #eda100; --other: #e87ba4;
+  --h0: rgba(11,11,11,0.06); --h1: #cde2fb; --h2: #9ec5f4; --h3: #6da7ec; --h4: #3987e5; --h5: #1c5cab;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #07090d; --glowA: rgba(57,135,229,0.30); --glowB: rgba(144,133,233,0.24); --glowC: rgba(25,158,112,0.16);
+    --dots: rgba(255,255,255,0.045); --card: rgba(20,23,29,0.55); --border: rgba(255,255,255,0.09);
+    --shadow: 0 10px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+    --text: #f0efec; --text2: #c3c2b7; --muted: #8f8d86; --grid: rgba(255,255,255,0.07); --axis: #383835;
+    --bar: #c3c2b7; --track: rgba(255,255,255,0.07); --hover: rgba(255,255,255,0.06); --sel: rgba(255,255,255,0.10);
+    --chip: rgba(255,255,255,0.05); --line: #f0efec; --warn-bg: rgba(250,178,25,0.12);
+    --opus: #3987e5; --sonnet: #d95926; --haiku: #199e70; --fable: #c98500; --other: #d55181;
+    --h0: rgba(255,255,255,0.05); --h1: #104281; --h2: #1c5cab; --h3: #2a78d6; --h4: #5598e7; --h5: #86b6ef;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text); font-family: Inter, system-ui, -apple-system, sans-serif; }
+.bg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.bg .dots { position: absolute; inset: 0; background-image: radial-gradient(var(--dots) 1px, transparent 1.5px); background-size: 24px 24px; }
+.bg .glow { position: absolute; border-radius: 50%; }
+.wrap { position: relative; max-width: 1360px; margin: 0 auto; padding: 28px 16px 32px; display: flex; flex-direction: column; gap: 20px; }
+.mono { font-family: var(--mono); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow);
+  backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%); padding: 20px 22px; }
+h1 { margin: 0; font-family: var(--mono); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { margin: 0; font-family: var(--mono); font-size: 13px; font-weight: 600; }
+h2 .dim, .muted { color: var(--muted); font-weight: 400; }
+.row { display: flex; flex-wrap: wrap; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.logo { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; padding: 0;
+  font-family: var(--mono); font-weight: 700; font-size: 16px; }
+.sub { margin: 3px 0 0; font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.ranges { display: flex; gap: 4px; padding: 4px; border-radius: 14px; }
+.ranges a { min-height: 44px; min-width: 56px; padding: 0 14px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; }
+.ranges a[aria-current="page"] { background: var(--sel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+.ranges a:hover { color: var(--text); }
+.warn { padding: 12px 16px; border-radius: 12px; background: var(--warn-bg); border: 1px solid var(--border); font-size: 13px; }
+.kpi { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; }
+.kpi .label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.kpi .value { font-family: var(--mono); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; }
+.kpi .note { font-size: 13px; color: var(--text2); }
+.kpi .tok { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--grid); font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.chart { display: flex; flex-direction: column; gap: 18px; }
+.chart-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text2); font-family: var(--mono); }
+.sw { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; display: inline-block; }
+.dash { width: 18px; border-top: 2px dashed var(--line); }
+.s-opus { background: var(--opus); } .s-sonnet { background: var(--sonnet); } .s-haiku { background: var(--haiku); }
+.s-fable { background: var(--fable); } .s-other { background: var(--other); }
+.readout { flex: 1 1 260px; max-width: 320px; align-self: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--chip); border: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px; font-family: var(--mono); }
+.readout .top { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+.readout .t { font-size: 12px; color: var(--muted); }
+.readout .total { font-size: 20px; font-weight: 600; }
+.readout .r { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; color: var(--text2); }
+.readout .r span:first-child { display: inline-flex; align-items: center; gap: 8px; }
+.readout .toks { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--grid); display: flex; flex-direction: column; gap: 4px; }
+.readout .toks .r, .readout .calls { font-size: 11px; color: var(--muted); }
+.plotrow { display: flex; flex-wrap: wrap; gap: 20px; }
+.plotwrap { flex: 999 1 480px; min-width: 0; display: flex; gap: 10px; }
+.yaxis { position: relative; width: 44px; height: 260px; flex-shrink: 0; }
+.yaxis span { position: absolute; right: 0; transform: translateY(50%); font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.plotcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.plot { position: relative; height: 260px; }
+.gl { position: absolute; left: 0; right: 0; border-top: 1px solid var(--grid); }
+.gl.axis { border-top-color: var(--axis); }
+.bars { position: absolute; inset: 0; display: flex; align-items: flex-end; }
+.col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; border-radius: 6px 6px 0 0; }
+.col.sel { background: var(--hover); }
+.col div { flex-shrink: 0; }
+.col .tp { border-radius: 4px 4px 0 0; }
+.avg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.avg polyline { fill: none; stroke: var(--line); stroke-width: 2px; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; opacity: 0.8; }
+.xaxis { display: flex; }
+.xaxis div { flex: 1; min-width: 0; display: flex; justify-content: center; white-space: nowrap; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.xaxis div.today { color: var(--text); }
+.panel { flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.panel.wide { flex-basis: 520px; }
+.item { display: flex; flex-direction: column; gap: 6px; }
+.item .hd { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-family: var(--mono); }
+.item .name { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.item .cost { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.item .meta { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.track { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.fill { height: 100%; border-radius: 4px; background: var(--bar); }
+.stats { display: flex; flex-wrap: wrap; gap: 10px; }
+.stats div { flex: 1 1 110px; padding: 10px 12px; border-radius: 12px; background: var(--chip); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+.stats b { font-family: var(--mono); font-size: 18px; font-weight: 600; }
+.stats span { font-size: 12px; color: var(--muted); }
+.comp { display: grid; grid-template-columns: minmax(130px, 180px) minmax(0, 1fr) minmax(72px, auto) 56px 84px; gap: 10px 12px; align-items: center;
+  font-family: var(--mono); font-size: 12px; }
+.comp .h { font-size: 11px; color: var(--muted); }
+.comp .rt { text-align: right; }
+.heat { display: flex; flex-direction: column; gap: 4px; }
+.heat .hr { display: flex; align-items: center; gap: 8px; }
+.heat .dl { width: 32px; flex-shrink: 0; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.heat .cells { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; }
+.heat .cells div { height: 18px; border-radius: 4px; }
+.heat .hl { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.h0 { background: var(--h0); } .h1 { background: var(--h1); } .h2 { background: var(--h2); } .h3 { background: var(--h3); } .h4 { background: var(--h4); } .h5 { background: var(--h5); }
+.key { display: flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.key i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; min-width: 960px; border-collapse: collapse; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+th { text-align: left; padding: 8px 10px; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--grid); }
+td { padding: 10px; color: var(--text2); border-bottom: 1px solid var(--grid); }
+th.n, td.n { text-align: right; }
+td.strong { color: var(--text); font-weight: 600; }
+td.proj { color: var(--text); }
+.pill { padding: 2px 8px; border-radius: 6px; background: var(--chip); border: 1px solid var(--border); }
+footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+@media (max-width: 640px) {
+  .kpi .value { font-size: 28px; }
+  .readout { max-width: none; }
+  .comp { grid-template-columns: minmax(0, 1fr) 72px 70px; }
+  .comp .bar, .comp .pc { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="bg" aria-hidden="true">
+  <div class="dots"></div>
+  <div class="glow" style="width: 820px; height: 820px; left: -240px; top: -300px; background: radial-gradient(circle, var(--glowA), transparent 65%)"></div>
+  <div class="glow" style="width: 760px; height: 760px; right: -200px; top: 420px; background: radial-gradient(circle, var(--glowB), transparent 65%)"></div>
+  <div class="glow" style="width: 700px; height: 700px; left: 18%; bottom: -260px; background: radial-gradient(circle, var(--glowC), transparent 65%)"></div>
+</div>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo card" aria-hidden="true">$_</div>
+      <div style="min-width: 0">
+        <h1>claudecost</h1>
+        <p class="sub">{{.DBPath}} | last ingest {{.LastIngest}} | {{.CallsTotal}} api calls</p>
+      </div>
+    </div>
+    <nav class="ranges card" aria-label="Date range">
+      {{range .Ranges}}<a href="{{.Href}}"{{if .Active}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}
+    </nav>
+  </header>
+
+  {{if .Unpriced}}
+  <div class="warn" role="status"><b>{{.Unpriced}} calls have no price</b> and are excluded from cost: {{.UnpricedModels}}. Add prices with <span class="mono">claudecost prices set</span> or the price update skill.</div>
+  {{end}}
+
+  {{if .Empty}}
+  <div class="card">No usage ingested yet. Check the transcripts directory and wait for the next ingest.</div>
+  {{else}}
+
+  <section class="row" aria-label="Headline numbers">
+    {{range .KPIs}}
+    <div class="card kpi">
+      <span class="label">{{.Label}}</span>
+      <span class="value">{{.Value}}</span>
+      <span class="note">{{.Sub}}</span>
+      <span class="tok">{{.Tok}}</span>
+    </div>
+    {{end}}
+  </section>
+
+  <section class="card chart" aria-label="Daily cost">
+    <div class="chart-head">
+      <div>
+        <h2>// daily cost by model <span class="dim">| {{.RangeLabel}} | {{.RangeTotal}}</span></h2>
+        <div class="legend">
+          {{range .Legend}}<span><i class="sw {{.Class}}"></i>{{.Name}} <span class="muted">{{.V}}</span></span>{{end}}
+          <span><i class="dash"></i>7d avg</span>
+        </div>
+      </div>
+    </div>
+    <div class="plotrow">
+      <div class="plotwrap">
+      <div class="yaxis" aria-hidden="true">{{range .Ticks}}<span style="bottom: {{.Pos}}%">{{.Label}}</span>{{end}}</div>
+      <div class="plotcol">
+        <div class="plot" id="plot">
+          {{range .Ticks}}<div class="gl{{if .Axis}} axis{{end}}" style="bottom: {{.Pos}}%" aria-hidden="true"></div>{{end}}
+          <div class="bars" style="gap: {{.BarGap}}">
+            {{range .Cols}}<div class="col{{if .Selected}} sel{{end}}" title="{{.Title}}">{{range .Segs}}<div class="{{.Class}}{{if .Top}} tp{{end}}" style="height: {{.H}}%"></div>{{end}}</div>{{end}}
+          </div>
+          <svg class="avg" viewBox="{{.VB}}" preserveAspectRatio="none" aria-hidden="true"><polyline points="{{.AvgPts}}"></polyline></svg>
+        </div>
+        <div class="xaxis" style="gap: {{.BarGap}}" aria-hidden="true">{{range .Cols}}<div{{if .Today}} class="today"{{end}}>{{.XL}}</div>{{end}}</div>
+      </div>
+      </div>
+      <div class="readout" id="readout" aria-live="polite">
+        <div class="top"><span class="t" data-k="title">{{.Readout.Title}}</span><span class="total" data-k="total">{{.Readout.Total}}</span></div>
+        <div data-k="rows">{{range .Readout.Rows}}<div class="r"><span><i class="sw {{.Class}}"></i>{{.Name}}</span><span>{{.V}}</span></div>{{end}}</div>
+        <div class="toks" data-k="toks">{{range .Readout.Toks}}<div class="r"><span>{{.Name}}</span><span>{{.V}}</span></div>{{end}}</div>
+        <div class="calls" data-k="calls">{{.Readout.Calls}}</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="row" aria-label="Breakdowns">
+    <div class="card panel">
+      <h2>// by model</h2>
+      {{range .Models}}
+      <div class="item">
+        <div class="hd"><span class="name"><i class="sw {{.Class}}"></i>{{.Name}}</span><span class="cost">{{.Cost}}</span></div>
+        <div class="track"><div class="fill {{.Class}}" style="width: {{.W}}%"></div></div>
+        <div class="meta"><span>{{.Pct}} of spend</span><span>{{.Calls}} calls | {{.Per}}/call</span></div>
+        <div class="meta"><span>{{.Tok}}</span></div>
+      </div>
+      {{end}}
+    </div>
+    <div class="card panel">
+      <h2>// by effort</h2>
+      {{range .Efforts}}
+      <div class="item">
+        <div class="hd"><span class="name">{{.Name}}</span><span class="cost">{{.Cost}}</span></div>
+        <div class="track"><div class="fill" style="width: {{.W}}%"></div></div>
+        <div class="meta"><span>{{.Pct}} of spend</span><span>{{.Calls}} calls | {{.Per}}/call</span></div>
+        <div class="meta"><span>{{.Tok}}</span></div>
+      </div>
+      {{end}}
+    </div>
+    <div class="card panel">
+      <h2>// by project</h2>
+      {{range .Projects}}
+      <div class="item">
+        <div class="hd"><span class="name" title="{{.Full}}">{{.Name}}</span><span class="mono" style="font-size: 13px; color: var(--text2)"><span class="muted">{{.Pct}}</span>  {{.Cost}}</span></div>
+        <div class="track"><div class="fill" style="width: {{.W}}%"></div></div>
+      </div>
+      {{end}}
+    </div>
+  </section>
+
+  <section class="row" aria-label="Where the money goes">
+    <div class="card panel wide">
+      <h2>// cost by token type</h2>
+      <div class="stats">{{range .Stats}}<div><b>{{.V}}</b><span>{{.Label}}</span></div>{{end}}</div>
+      <div class="comp">
+        <span class="h">type</span><span class="h bar"></span><span class="h rt">tokens</span><span class="h rt pc">share</span><span class="h rt">cost</span>
+        {{range .Comp}}
+        <span>{{.Name}}</span>
+        <div class="track bar"><div class="fill" style="width: {{.W}}%"></div></div>
+        <span class="rt" style="color: var(--text2)">{{.Tok}}</span>
+        <span class="rt muted pc">{{.Pct}}</span>
+        <span class="rt">{{.Cost}}</span>
+        {{end}}
+      </div>
+    </div>
+    <div class="card panel wide">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: baseline">
+        <h2>// when you spend <span class="dim">| hour x weekday, local</span></h2>
+        <div class="key" aria-hidden="true">less <i class="h0"></i><i class="h1"></i><i class="h2"></i><i class="h3"></i><i class="h4"></i><i class="h5"></i> more</div>
+      </div>
+      <div class="heat">
+        {{range .Heat}}
+        <div class="hr"><span class="dl">{{.Day}}</span><div class="cells">{{range .Cells}}<div class="h{{.Lvl}}" title="{{.Tip}}"></div>{{end}}</div></div>
+        {{end}}
+        <div class="hr" aria-hidden="true"><span class="dl"></span><div class="hl">{{range .HeatHours}}<span>{{.}}</span>{{end}}</div></div>
+      </div>
+      <p style="margin: 0; font-size: 12px; color: var(--text2)">Peak: <span class="mono" style="color: var(--text)">{{.Peak}}</span> | cost per active hour <span class="mono" style="color: var(--text)">{{.Burn}}</span></p>
+    </div>
+  </section>
+
+  <section class="card" aria-label="Most expensive sessions" style="display: flex; flex-direction: column; gap: 12px">
+    <h2>// top sessions <span class="dim">| {{.RangeLabel}}</span></h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th scope="col">started</th><th scope="col">project</th><th scope="col">model</th><th scope="col">effort</th>
+          <th scope="col" class="n">calls</th><th scope="col" class="n">subagent $</th><th scope="col" class="n">duration</th>
+          <th scope="col" class="n">tokens</th><th scope="col" class="n">out</th><th scope="col" class="n">cost</th>
+        </tr></thead>
+        <tbody>
+          {{range .Sessions}}
+          <tr>
+            <td>{{.When}}</td>
+            <td class="proj" title="{{.Full}}">{{.Project}}</td>
+            <td><span style="display: inline-flex; align-items: center; gap: 8px"><i class="sw {{.Class}}" style="width: 8px; height: 8px"></i>{{.Model}}</span></td>
+            <td><span class="pill">{{.Effort}}</span></td>
+            <td class="n">{{.Calls}}</td><td class="n">{{.Sub}}</td><td class="n">{{.Dur}}</td>
+            <td class="n">{{.Tok}}</td><td class="n muted">{{.Out}}</td><td class="n strong">{{.Cost}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {{end}}
+
+  <footer>
+    <span>{{.IngestNote}}</span>
+    <span>auto-refreshes when new usage arrives | theme follows system</span>
+  </footer>
+</div>
+<script>
+(function () {
+  const DAYS = {{.Days}} || [];
+  const STAMP = {{.Stamp}};
+  const ro = document.getElementById('readout');
+  const cols = document.querySelectorAll('.col');
+  const plot = document.getElementById('plot');
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const row = (r, withSwatch) => {
+    const d = el('div', 'r'), a = el('span');
+    if (withSwatch) a.append(el('i', 'sw ' + r.class));
+    a.append(r.name);
+    d.append(a, el('span', null, r.v));
+    return d;
+  };
+  function show(i) {
+    const d = DAYS[i];
+    if (!d || !ro) return;
+    cols.forEach((c, j) => c.classList.toggle('sel', j === i));
+    ro.querySelector('[data-k=title]').textContent = d.title;
+    ro.querySelector('[data-k=total]').textContent = d.total;
+    ro.querySelector('[data-k=rows]').replaceChildren(...(d.rows || []).map(r => row(r, true)));
+    ro.querySelector('[data-k=toks]').replaceChildren(...(d.toks || []).map(r => row(r, false)));
+    ro.querySelector('[data-k=calls]').textContent = d.calls;
+  }
+  cols.forEach((c, i) => c.addEventListener('mouseenter', () => show(i)));
+  if (plot) plot.addEventListener('mouseleave', () => show(DAYS.length - 1));
+  setInterval(async () => {
+    try {
+      const r = await fetch('/api/stamp');
+      if (r.ok && (await r.text()) !== STAMP) location.reload();
+    } catch (e) {}
+  }, 30000);
+})();
+</script>
+</body>
+</html>
