@@ -1,0 +1,4 @@
+claudecost
+*.db
+*.db-wal
+*.db-shm

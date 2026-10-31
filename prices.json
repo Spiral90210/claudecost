@@ -1,0 +1,21 @@
+{
+  "settings": {
+    "geo_us_multiplier": 1.1,
+    "web_search_per_1k": 10
+  },
+  "prices": [
+    {"model": "claude-fable-5-1",  "speed": "standard", "min_prompt": 0,      "effective_from": "2000-01-01", "input": 10,   "output": 50,   "cache_write_5m": 12.5,  "cache_write_1h": 20,   "cache_read": 0.25, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31"},
+    {"model": "claude-opus-5-5",   "speed": "standard", "min_prompt": 0,      "effective_from": "2000-01-01", "input": 4,    "output": 20,   "cache_write_5m": 5,     "cache_write_1h": 8,    "cache_read": 0.20, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31"},
+    {"model": "claude-opus-5-5",   "speed": "fast",     "min_prompt": 0,      "effective_from": "2000-01-01", "input": 8,    "output": 40,   "cache_write_5m": 10,    "cache_write_1h": 16,   "cache_read": 0.40, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31 (fast base x cache multipliers)"},
+    {"model": "claude-opus-5",     "speed": "standard", "min_prompt": 0,      "effective_from": "2000-01-01", "input": 5,    "output": 25,   "cache_write_5m": 6.25,  "cache_write_1h": 10,   "cache_read": 0.50, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31"},
+    {"model": "claude-opus-5",     "speed": "fast",     "min_prompt": 0,      "effective_from": "2000-01-01", "input": 10,   "output": 50,   "cache_write_5m": 12.5,  "cache_write_1h": 20,   "cache_read": 1.00, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31 (fast base x cache multipliers)"},
+    {"model": "claude-opus-4-8",   "speed": "standard", "min_prompt": 0,      "effective_from": "2000-01-01", "input": 5,    "output": 25,   "cache_write_5m": 6.25,  "cache_write_1h": 10,   "cache_read": 0.50, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31"},
+    {"model": "claude-opus-4-8",   "speed": "fast",     "min_prompt": 0,      "effective_from": "2000-01-01", "input": 10,   "output": 50,   "cache_write_5m": 12.5,  "cache_write_1h": 20,   "cache_read": 1.00, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31 (fast base x cache multipliers)"},
+    {"model": "claude-sonnet-5-5", "speed": "standard", "min_prompt": 0,      "effective_from": "2000-01-01", "input": 2,    "output": 10,   "cache_write_5m": 2.5,   "cache_write_1h": 4,    "cache_read": 0.10, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31"},
+    {"model": "claude-sonnet-5",   "speed": "standard", "min_prompt": 0,      "effective_from": "2000-01-01", "input": 2,    "output": 10,   "cache_write_5m": 2.5,   "cache_write_1h": 4,    "cache_read": 0.20, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31"},
+    {"model": "claude-sonnet-4-6", "speed": "standard", "min_prompt": 0,      "effective_from": "2000-01-01", "input": 3,    "output": 15,   "cache_write_5m": 3.75,  "cache_write_1h": 6,    "cache_read": 0.30, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31"},
+    {"model": "claude-haiku-5-5",  "speed": "standard", "min_prompt": 0,      "effective_from": "2000-01-01", "input": 0.10, "output": 0.50, "cache_write_5m": 0.125, "cache_write_1h": 0.20, "cache_read": 0.01, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31"},
+    {"model": "claude-haiku-5-5",  "speed": "standard", "min_prompt": 100001, "effective_from": "2000-01-01", "input": 0.50, "output": 2.50, "cache_write_5m": 0.625, "cache_write_1h": 1,    "cache_read": 0.05, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31 (prompt over 100K tokens)"},
+    {"model": "claude-haiku-4-5",  "speed": "standard", "min_prompt": 0,      "effective_from": "2000-01-01", "input": 1,    "output": 5,    "cache_write_5m": 1.25,  "cache_write_1h": 2,    "cache_read": 0.10, "source": "platform.claude.com/docs/en/about-claude/pricing 2026-10-31"}
+  ]
+}
